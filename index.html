@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Up to the Sky - 華語句子遊戲</title>
+    
+    <!-- 引入 Tailwind CSS (樣式) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 和 ReactDOM (核心庫) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- 引入 Babel (讓瀏覽器可以執行 JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* 自定義動畫 */
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-40px) scale(1.5); }
+        }
+        /* 新增：向上浮現並停留的動畫 (用於過關畫面) */
+        @keyframes fadeInUp {
+            0% { opacity: 0; transform: translateY(40px) scale(0.9); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        /* 氣球自然飄動動畫 */
+        @keyframes sway {
+            0%, 100% { transform: rotate(-3deg) translateY(0); }
+            50% { transform: rotate(3deg) translateY(-8px); }
+        }
+        /* 灑花落下動畫 */
+        @keyframes confettiFall {
+            0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+            20% { opacity: 1; }
+            100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+        }
+        /* 獎盃浮動動畫 */
+        @keyframes trophyFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        /* 過關氣球上升動畫 */
+        @keyframes balloonRise {
+            0% { bottom: -100px; transform: translateX(0); opacity: 0.8; }
+            25% { transform: translateX(15px); }
+            50% { transform: translateX(-15px); }
+            75% { transform: translateX(10px); }
+            100% { bottom: 120%; transform: translateX(0); opacity: 0; }
+        }
+        
+        .animate-float-up {
+            animation: floatUp 1s ease-out forwards;
+        }
+        .animate-fade-in-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+        .animate-sway {
+            animation: sway 3s ease-in-out infinite;
+        }
+        .animate-trophy {
+            animation: trophyFloat 3s ease-in-out infinite;
+        }
+        /* 慢速飛行過渡 */
+        .transition-slow-fly {
+            transition-property: all;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 3000ms; /* 3秒慢速飛行 */
+        }
+        
+        .select-none {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* 隱藏滾動條但保留功能 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #ddd;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #ccc;
+        }
+    </style>
+</head>
+<body class="bg-yellow-50 h-screen w-screen overflow-hidden font-sans">
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- 1. 內建圖示元件 ---
+        const IconBase = ({ children, size = 24, className = "", ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
+        );
+        const Heart = (props) => <IconBase {...props}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /></IconBase>;
+        const RefreshCw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></IconBase>;
+        const Star = (props) => <IconBase {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></IconBase>;
+        const Frown = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10" /><path d="M16 16s-1.5-2-4-2-4 2-4 2" /><line x1="9" x2="9.01" y1="9" y2="9" /><line x1="15" x2="15.01" y1="9" y2="9" /></IconBase>;
+        const Smile = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" x2="9.01" y1="9" y2="9" /><line x1="15" x2="15.01" y1="9" y2="9" /></IconBase>;
+        const BookOpen = (props) => <IconBase {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></IconBase>;
+        const Volume2 = (props) => <IconBase {...props}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></IconBase>;
+        const VolumeX = (props) => <IconBase {...props}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" x2="17" y1="9" y2="15" /><line x1="17" x2="23" y1="9" y2="15" /></IconBase>;
+        const Maximize = (props) => <IconBase {...props}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>;
+        const Minimize = (props) => <IconBase {...props}><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></IconBase>;
+        const Check = (props) => <IconBase {...props}><polyline points="20 6 9 17 4 12" /></IconBase>;
+        const X = (props) => <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></IconBase>;
+        const ListChecks = (props) => <IconBase {...props}><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /><path d="M13 6h8" /><path d="M13 12h8" /><path d="M13 18h8" /></IconBase>;
+        const Edit = (props) => <IconBase {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></IconBase>;
+        const Trophy = (props) => <IconBase {...props}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17" /><path d="M14 14.66V17" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /><path d="M8.5 22v-2.05" /><path d="M15.5 22v-2.05" /></IconBase>;
+        const Share2 = (props) => <IconBase {...props}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></IconBase>;
+        const User = (props) => <IconBase {...props}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></IconBase>;
+        const Clock = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></IconBase>;
+
+        // --- 2. 錯誤邊界 ---
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
+                            <div className="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+                                <h2 className="text-xl font-bold text-red-600 mb-4">哎呀！遊戲發生了一點問題。</h2>
+                                <p className="text-gray-700 mb-2">錯誤訊息：</p>
+                                <pre className="bg-gray-100 p-3 rounded text-sm overflow-auto text-red-500">{this.state.error && this.state.error.toString()}</pre>
+                                <button onClick={() => window.location.reload()} className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">重新整理頁面</button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children; 
+            }
+        }
+
+        // --- 3. 核心邏輯 ---
+        const playSound = (type, enabled) => {
+            if (!enabled) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            const now = ctx.currentTime;
+
+            if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(659.25, now);
+                osc.frequency.setValueAtTime(783.99, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'win') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2);
+                osc.frequency.setValueAtTime(1046.50, now + 0.3);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'lose') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.linearRampToValueAtTime(349, now + 0.2);
+                osc.frequency.linearRampToValueAtTime(293, now + 0.4);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'complete') {
+                // 大獎勵音效
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.setValueAtTime(659.25, now + 0.15); // E5
+                osc.frequency.setValueAtTime(783.99, now + 0.3); // G5
+                osc.frequency.setValueAtTime(1046.50, now + 0.45); // C6
+                osc.frequency.setValueAtTime(783.99, now + 0.6); // G5
+                osc.frequency.setValueAtTime(1046.50, now + 0.75); // C6
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 1.2);
+                osc.start(now);
+                osc.stop(now + 1.2);
+            }
+        };
+
+        const speakSentence = (text) => {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-TW';
+            utterance.rate = 0.85;
+            window.speechSynthesis.speak(utterance);
+        };
+
+        const rawText = `
+第一課 新同學
+老師：今天，我們有兩個新同學，現在請他們介紹自己。
+友朋：大家好，我叫方友朋，今年八歲，我最喜歡跟爸爸一起游泳。
+張莉：大家好，我叫張莉，今年七歲，我比較喜歡看書。
+大文：你們好，我叫李大文。
+大文：很高興認識你們。
+老師：歡迎你們來中文學校學華語。
+第二課 我爸爸做生意
+大文：張莉，照片裡面的人是誰？
+張莉：左邊是我外公，他以前是醫生，右邊是我外婆。
+大文：你爸爸媽媽做什麼工作？
+張莉：我爸爸做生意，我媽媽幫他。你爸爸媽媽呢?
+大文：我爸爸在電腦公司上班，我媽媽在銀行工作。你以後想做什麼？
+張莉：我以後想跟爸爸一樣。
+第三課 去超級市場
+大文：媽媽，你要去哪裡？
+媽媽：我要去附近的超級市場買東西，你要跟我一起去嗎？
+大文：要，我想去買巧克力冰淇淋。你今天要買什麼？
+媽媽：我今天要買魚、牛肉、青菜，還要買米。
+大文：我也可以買糖果嗎？
+媽媽：我們去看一下吧！
+第四課 我想吃漢堡
+文文：我想吃漢堡跟薯條，我們可不可以出去吃？
+媽媽：今天先在家吃，週末再出去吃吧！今天晚餐想吃什麼？
+大文：我想吃麵。文文，你呢？
+文文：我想吃蛋炒飯，有湯嗎？
+媽媽：我已經做了玉米湯。
+大文：媽，我現在很餓，想快點吃晚飯，好嗎？
+第五課 春天快到了
+大文：你看！樹葉變黃了，秋天快到了。
+張莉：可是草還是綠色的。
+心美：秋天天氣很好。我覺得很舒服。
+東明：春天也不錯。
+大文：春天的時候，我們家院子有很多顏色的花，紅色的、白色的都有。
+心美：我覺得紅色的花最漂亮。
+第六課 農曆新年
+大文：老師說農曆新年快到了。
+爸爸：對，下個星期五是農曆新年。
+大文：媽媽會去華人超市買年糕嗎？
+爸爸：會，那天我們還要給爺爺奶奶拜年。
+大文：太好了，爺爺每年都會給我紅包。
+爸爸：如果在臺灣，我們還會貼春聯、放鞭炮。
+第七課 早一點睡覺
+爸爸：大文，該起床了！來不及了！
+大文：我很累，還想睡覺。
+爸爸：今天晚上早一點睡，現在趕快去刷牙、洗澡。
+大文：我昨天晚上洗過澡了。
+爸爸：還有，別忘了用肥皂洗臉。
+大文：我知道了，要洗乾淨。
+第八課 我的寵物
+心美：昨天我爸爸的朋友送給我一隻狗，你們家有寵物嗎？
+大文：有，我家有兩隻狗，我每天都帶牠們去散步。
+心美：張莉，你養過狗嗎？
+張莉：我沒養過狗，我去年養了一隻貓，可是上個月不見了。
+友朋：我也養過貓，非常可愛，我每天都餵牠。
+張莉：以後我想養一隻兔子。
+第九課 音樂教室在北方
+友朋：東明，這是什麼？
+東明：指南針，也叫指北針，它告訴我們南方和北方在哪裡。
+友朋：音樂教室是什麼方向？
+東明：音樂教室在北方，校門口在南方。
+友朋：足球場在東方，還是西方？
+東明：因為音樂教室在北方，所以足球場在東方。
+第十課 外公、外婆住在臺灣
+心美：暑假的時候，我會去臺灣看外公、外婆。
+張莉：你外公、外婆家在哪裡？
+心美：他們本來住在臺北，退休以後，跟我的舅舅住在臺南。
+張莉：你們每年都去看外公外婆嗎？
+心美：我們每年都去看他們一次，你外公外婆住在哪裡？
+張莉：我外公、外婆現在住在紐約，他們下個月會來看我們。
+心美：我外公、外婆喜歡旅行，常常來看我們，也常去法國看阿姨。
+第十一課 去動物園
+心美：下個星期五，學校要帶我們去動物園玩。
+心美哥哥：太好了！你可以看到你喜歡的大象和老虎。
+心美：這一次我希望可以看到熊貓和猴子。
+心美哥哥：對，以前我去的時候，動物園沒有熊貓。
+爸爸：現在不但有熊貓，還有企鵝。
+心美：我覺得熊貓胖胖的，真可愛！
+心美哥哥：我喜歡長頸鹿，脖子長長的。
+第十二課 打網路電話
+爸爸：大文，我現在要用網路給姑姑打電話。
+大文：可以看到姑姑嗎？我很久沒跟姑姑說話了。
+爸爸：可以看到她的影像，快一點過來。
+姑姑：大文，你看起來瘦了。
+大文：我沒瘦，我長高了。
+姑姑：文文現在也跟你一起去學華語嗎?
+大文：是啊！上中文課很有意思。
+姑姑：你好好學華語，以後可以用網路給我寫信。
+大文：沒問題，我一定會好好學華語。
+`;
+
+        const parseData = () => {
+            const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
+            const data = [];
+            const lessonCharMap = {}; 
+            let currentLesson = "";
+            const allChars = new Set(); 
+
+            lines.forEach(line => {
+                if (line.startsWith("第") && line.includes("課")) {
+                    currentLesson = line;
+                    if (!lessonCharMap[currentLesson]) {
+                        lessonCharMap[currentLesson] = new Set();
+                    }
+                } else {
+                    const parts = line.split(/[:：]/); 
+                    let fullSentence = parts.length > 1 ? parts[1] : parts[0];
+                    fullSentence = fullSentence ? fullSentence.trim() : "";
+
+                    if (fullSentence && currentLesson) {
+                        for (let char of fullSentence) {
+                             if (!/[，。？！、：；?!\s,.]/.test(char)) {
+                                 lessonCharMap[currentLesson].add(char);
+                                 allChars.add(char);
+                             }
+                        }
+
+                        // 先根據標點符號分割
+                        const rawSegments = fullSentence.split(/[，。？！、;；,?!]/).filter(s => s.trim().length > 0);
+                        
+                        for (let i = 0; i < rawSegments.length; i++) {
+                            let seg = rawSegments[i].trim();
+                            
+                            // 合併短句邏輯
+                            while (seg.length <= 4 && i < rawSegments.length - 1) {
+                                i++; 
+                                seg = seg + "，" + rawSegments[i].trim();
+                            }
+                            
+                            if (seg.length >= 2) {
+                                data.push({ lesson: currentLesson, sentence: seg });
+                            }
+                        }
+                    }
+                }
+            });
+            return { data, allChars: Array.from(allChars), lessonCharMap };
+        };
+
+        const { data: SENTENCE_DB, allChars: CHAR_POOL, lessonCharMap: LESSON_CHAR_MAP } = parseData();
+
+        // --- 灑花特效組件 ---
+        const Confetti = ({ intensity = 'normal' }) => {
+            const count = intensity === 'high' ? 200 : 100;
+            const particles = useMemo(() => {
+                const colors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#FF9F43', '#A29BFE', '#54a0ff', '#FF4081', '#00E676'];
+                return Array.from({ length: count }).map((_, i) => ({
+                    id: i,
+                    left: Math.random() * 100, 
+                    delay: Math.random() * 2,  
+                    duration: 2.5 + Math.random() * 2, 
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    size: 6 + Math.random() * 8, 
+                    rotation: Math.random() * 360, 
+                    shape: Math.random() > 0.5 ? '50%' : '0' 
+                }));
+            }, [count]);
+
+            return (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
+                    {particles.map((p) => (
+                        <div key={p.id} className="absolute" style={{
+                                left: `${p.left}%`,
+                                top: '-20px',
+                                width: `${p.size}px`,
+                                height: `${p.size}px`,
+                                backgroundColor: p.color,
+                                borderRadius: p.shape,
+                                transform: `rotate(${p.rotation}deg)`,
+                                opacity: 0.8,
+                                animation: `confettiFall ${p.duration}s linear ${p.delay}s forwards`
+                            }}
+                        />
+                    ))}
+                </div>
+            );
+        };
+
+        // --- 氣球上升特效組件 ---
+        const FlyingBalloons = () => {
+            const balloons = useMemo(() => {
+                const colors = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#FF9F43", "#A29BFE", "#54a0ff"];
+                return Array.from({ length: 30 }).map((_, i) => ({
+                    id: i,
+                    left: Math.random() * 100,
+                    animationDuration: 4 + Math.random() * 5, // 秒
+                    animationDelay: Math.random() * 3, // 秒
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    scale: 0.6 + Math.random() * 0.4
+                }));
+            }, []);
+
+            return (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
+                    {balloons.map(b => (
+                        <div 
+                            key={b.id}
+                            className="absolute"
+                            style={{
+                                left: `${b.left}%`,
+                                bottom: '-150px',
+                                transform: `scale(${b.scale})`,
+                                animation: `balloonRise ${b.animationDuration}s linear ${b.animationDelay}s infinite`
+                            }}
+                        >
+                            <svg width="40" height="50" viewBox="0 0 40 50" style={{ filter: 'drop-shadow(2px 4px 6px rgba(0,0,0,0.2))' }}>
+                                <path d="M20 40 Q20 55 15 55" stroke="#ccc" strokeWidth="1.5" fill="none" />
+                                <ellipse cx="20" cy="22" rx="18" ry="22" fill={b.color} />
+                                <polygon points="20,44 17,48 23,48" fill={b.color} />
+                                <ellipse cx="14" cy="14" rx="5" ry="8" fill="white" opacity="0.3" transform="rotate(-30 14 14)" />
+                            </svg>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        const AnimalSvg = ({ type, status, mistakes }) => {
+            const isWorried = mistakes >= 4;
+            const colors = {
+                bear: { body: "#D7CCC8", stroke: "#8D6E63", blush: "#FFAB91", snout: "#FFF8E1", nose: "#5D4037" },
+                rabbit: { body: "#FCE4EC", stroke: "#F06292", blush: "#FF80AB", snout: "#FFF", nose: "#EC407A" },
+                cat: { body: "#FFF3E0", stroke: "#FFB74D", blush: "#FFCCBC", snout: "#FFF", nose: "#FF7043" },
+                dog: { body: "#EFEBE9", stroke: "#A1887F", blush: "#FFAB91", snout: "#D7CCC8", nose: "#4E342E" },
+                panda: { body: "#FFF", stroke: "#212121", blush: "#FFCDD2", snout: "#FFF", limbs: "#212121", nose: "#333333" }, 
+                penguin: { body: "#37474F", stroke: "#263238", blush: "#FF8A65", snout: "#ECEFF1", tummy: "#FFF", feet: "#FF9800", nose: "#FF9800" }
+            };
+            const c = colors[type] || colors.bear;
+            const limbColor = c.limbs || c.body; 
+
+            // Render Face Logic
+            const renderFace = () => {
+                const noseY = type === 'panda' ? 5 : 8;
+                const noseRx = type === 'panda' ? 6 : 4.5;
+                const noseRy = type === 'panda' ? 4.5 : 3.5;
+                const philtrumHeight = 16; 
+                const showPhiltrum = (type === 'panda' || type === 'bear' || type === 'dog') && status !== 'won'; 
+                const philtrum = showPhiltrum ? <line x1="0" y1={noseY + noseRy} x2="0" y2={philtrumHeight} stroke="#3E2723" strokeWidth="2" /> : null;
+                
+                let nose = null;
+                if (type === 'penguin') {
+                    nose = <path d="M-8 8 L0 18 L8 8 Z" fill={c.nose} stroke="#E65100" strokeWidth="1" />;
+                } else {
+                    nose = <ellipse cx="0" cy={noseY} rx={noseRx} ry={noseRy} fill={c.nose} />;
+                }
+
+                const strokeColor = type === 'panda' ? '#FFF' : '#3E2723';
+                const eyeColor = type === 'panda' ? '#FFF' : '#3E2723';
+                const faceStrokeColor = type === 'panda' ? '#333' : '#3E2723';
+                
+                if (status === 'lost') {
+                    return <g>{nose}<path d="M-22 -8 L-12 2 M-12 -8 L-22 2" stroke={faceStrokeColor} strokeWidth="3" strokeLinecap="round" /><path d="M12 -8 L22 2 M22 -8 L12 2" stroke={faceStrokeColor} strokeWidth="3" strokeLinecap="round" /><path d="M-5 20 Q0 15 5 20 Q10 25 5 30" stroke={faceStrokeColor} strokeWidth="2" fill="none" /></g>;
+                } else if (status === 'won') {
+                    return <g>{nose}<path d="M-25 -5 Q-18 -12 -11 -5" stroke={faceStrokeColor} strokeWidth="3" fill="none" strokeLinecap="round" /><path d="M11 -5 Q18 -12 25 -5" stroke={faceStrokeColor} strokeWidth="3" fill="none" strokeLinecap="round" />{type !== 'penguin' && <path d="M-8 18 Q0 28 8 18 Z" fill="#D84315" stroke="none" />}<text x="35" y="-40" fontSize="20" className="animate-bounce">❤️</text></g>;
+                } else if (isWorried) {
+                    return (
+                        <g>
+                            {nose}
+                            {philtrum}
+                            <path d="M-25 -15 L-15 -10" stroke={faceStrokeColor} strokeWidth="2" strokeLinecap="round" />
+                            <path d="M25 -15 L15 -10" stroke={faceStrokeColor} strokeWidth="2" strokeLinecap="round" />
+                            <circle cx="-18" cy="-5" r="3" fill={eyeColor} />
+                            {type === 'panda' && <circle cx="-18" cy="-5" r="1.5" fill="#333" />}
+                            <circle cx="18" cy="-5" r="3" fill={eyeColor} />
+                            {type === 'panda' && <circle cx="18" cy="-5" r="1.5" fill="#333" />}
+                            <path d="M-6 22 Q0 16 6 22" stroke={faceStrokeColor} strokeWidth="2" fill="none" />
+                            <path d="M30 -20 Q35 -10 30 0 Q25 -10 30 -20" fill="#4FC3F7" opacity="0.8"><animate attributeName="opacity" values="0;1;0" dur="1s" repeatCount="indefinite" /><animateTransform attributeName="transform" type="translate" values="0 0; 0 5" dur="1s" repeatCount="indefinite" /></path>
+                        </g>
+                    );
+                } else {
+                    let mouth = null;
+                    if (type === 'penguin') {
+                    } else if (type === 'cat' || type === 'rabbit') {
+                        mouth = <path d="M-5 16 Q-2.5 19 0 16 Q2.5 19 5 16" stroke={faceStrokeColor} strokeWidth="2" fill="none" strokeLinecap="round" />;
+                    } else {
+                        mouth = <path d="M-8 20 Q-4 24 0 16 Q4 24 8 20" stroke={faceStrokeColor} strokeWidth="2" fill="none" strokeLinecap="round" />;
+                    }
+
+                    return (
+                        <g>
+                            {nose}
+                            {philtrum}
+                            <circle cx="-18" cy="-5" r="4" fill={eyeColor} />
+                            {type === 'panda' && <circle cx="-18" cy="-5" r="2.5" fill="#333" />}
+                            <circle cx="-16" cy="-7" r="1.5" fill="white" />
+                            
+                            <circle cx="18" cy="-5" r="4" fill={eyeColor} />
+                            {type === 'panda' && <circle cx="18" cy="-5" r="2.5" fill="#333" />}
+                            <circle cx="20" cy="-7" r="1.5" fill="white" />
+                            {mouth}
+                        </g>
+                    );
+                }
+            };
+
+            // Render Body Logic
+            const renderBody = () => {
+                if (type === 'penguin') {
+                    return (
+                        <React.Fragment>
+                            <path d="M-40 70 L-20 75 Q-25 60 -40 65 Z" fill={c.feet} stroke="#E65100" strokeWidth="2" />
+                            <path d="M40 70 L20 75 Q25 60 40 65 Z" fill={c.feet} stroke="#E65100" strokeWidth="2" />
+                            <ellipse cx="0" cy="40" rx="37" ry="42" fill={c.body} stroke={c.stroke} strokeWidth="3" />
+                            <path d="M-25 40 Q-25 75 0 75 Q25 75 25 40 Q25 15 0 15 Q-25 15 -25 40" fill={c.tummy} />
+                            <path d="M-35 30 Q-55 45 -50 65 Q-40 70 -30 55" fill={c.body} stroke={c.stroke} strokeWidth="3" />
+                            <path d="M35 30 Q55 45 50 65 Q40 70 30 55" fill={c.body} stroke={c.stroke} strokeWidth="3" />
+                            <circle cx="0" cy="-20" r="4" fill={c.body} />
+                        </React.Fragment>
+                    );
+                }
+                return (
+                    <React.Fragment>
+                        <ellipse cx="0" cy="40" rx="35" ry="40" fill={c.body} stroke={c.stroke} strokeWidth="3" />
+                        {type !== 'panda' && <ellipse cx="0" cy="40" rx="20" ry="25" fill="#FFF" opacity="0.4" />} 
+                        <ellipse cx="-25" cy="70" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                        <ellipse cx="25" cy="70" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                        
+                        {/* 手臂邏輯 - 修正：歡呼時手往兩邊開，手掌明顯且塗色 */}
+                        {status === 'won' ? (
+                            <g>
+                                {/* 左手大歡呼 - 向左上方延伸 */}
+                                <path d="M-30 35 Q-55 25 -60 0" stroke={c.stroke} strokeWidth="14" fill="none" strokeLinecap="round" />
+                                <path d="M-30 35 Q-55 25 -60 0" stroke={limbColor} strokeWidth="10" fill="none" strokeLinecap="round" />
+                                <ellipse cx="-60" cy="0" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                                
+                                {/* 右手大歡呼 - 向右上方延伸 */}
+                                <path d="M30 35 Q55 25 60 0" stroke={c.stroke} strokeWidth="14" fill="none" strokeLinecap="round" />
+                                <path d="M30 35 Q55 25 60 0" stroke={limbColor} strokeWidth="10" fill="none" strokeLinecap="round" />
+                                <ellipse cx="60" cy="0" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                            </g>
+                        ) : (
+                            <g>
+                                <ellipse cx="-35" cy="30" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                                <ellipse cx="35" cy="30" rx="12" ry="10" fill={limbColor} stroke={c.stroke} strokeWidth="3" />
+                            </g>
+                        )}
+                        
+                        {status !== 'won' && <circle cx="0" cy="-20" r="6" fill={limbColor} stroke={c.stroke} strokeWidth="3" />}
+                    </React.Fragment>
+                );
+            };
+
+            return (
+                <g transform="scale(0.8)">
+                    {type === 'rabbit' && <g><ellipse cx="-20" cy="-45" rx="8" ry="25" fill={c.body} stroke={c.stroke} strokeWidth="3" /><ellipse cx="-20" cy="-45" rx="4" ry="15" fill={c.blush} opacity="0.6" /><ellipse cx="20" cy="-45" rx="8" ry="25" fill={c.body} stroke={c.stroke} strokeWidth="3" /><ellipse cx="20" cy="-45" rx="4" ry="15" fill={c.blush} opacity="0.6" /></g>}
+                    {type === 'bear' && <g><circle cx="-35" cy="-35" r="14" fill={c.body} stroke={c.stroke} strokeWidth="3" /><circle cx="-35" cy="-35" r="7" fill={c.blush} opacity="0.6" /><circle cx="35" cy="-35" r="14" fill={c.body} stroke={c.stroke} strokeWidth="3" /><circle cx="35" cy="-35" r="7" fill={c.blush} opacity="0.6" /></g>}
+                    {type === 'panda' && <g><circle cx="-35" cy="-35" r="12" fill="#212121" stroke="#212121" strokeWidth="3" /><circle cx="35" cy="-35" r="12" fill="#212121" stroke="#212121" strokeWidth="3" /></g>}
+                    {type === 'cat' && <g><path d="M-40 -10 L-50 -50 L-10 -30 Z" fill={c.body} stroke={c.stroke} strokeWidth="3" strokeLinejoin="round" /><path d="M-40 -20 L-45 -40 L-20 -30 Z" fill={c.blush} opacity="0.6" /><path d="M40 -10 L50 -50 L10 -30 Z" fill={c.body} stroke={c.stroke} strokeWidth="3" strokeLinejoin="round" /><path d="M40 -20 L45 -40 L20 -30 Z" fill={c.blush} opacity="0.6" /></g>}
+                    {type === 'dog' && <g><ellipse cx="-45" cy="-10" rx="10" ry="25" fill={c.body} stroke={c.stroke} strokeWidth="3" transform="rotate(20 -45 -10)" /><ellipse cx="45" cy="-10" rx="10" ry="25" fill={c.body} stroke={c.stroke} strokeWidth="3" transform="rotate(-20 45 -10)" /></g>}
+                    
+                    {renderBody()}
+
+                    <ellipse cx="0" cy="0" rx="45" ry="38" fill={c.body} stroke={c.stroke} strokeWidth="3" />
+                    {type === 'panda' && <g><ellipse cx="-18" cy="-5" rx="12" ry="9" fill="#212121" transform="rotate(-20 -18 -5)" /><ellipse cx="18" cy="-5" rx="12" ry="9" fill="#212121" transform="rotate(20 18 -5)" /></g>}
+                    {type !== 'penguin' && type !== 'cat' && <ellipse cx="0" cy="10" rx="18" ry="14" fill={c.snout} />}
+                    {type === 'penguin' && <g><path d="M-30 -10 Q-15 -30 0 -10 Q15 -30 30 -10 Q35 30 0 35 Q-35 30 -30 -10" fill="#FFF" /></g>}
+                    {type === 'cat' && <g stroke={c.stroke} strokeWidth="2"><line x1="-50" y1="5" x2="-20" y2="10" /><line x1="-50" y1="15" x2="-20" y2="15" /><line x1="50" y1="5" x2="20" y2="10" /><line x1="50" y1="15" x2="20" y2="15" /></g>}
+                    
+                    <circle cx="-25" cy="8" r="6" fill={c.blush} opacity="0.5" /><circle cx="25" cy="8" r="6" fill={c.blush} opacity="0.5" />
+                    {renderFace()}
+                </g>
+            );
+        };
+
+        const BalloonAnimal = ({ mistakes, maxMistakes, status, character }) => {
+            const remainingBalloons = Math.max(0, maxMistakes - mistakes);
+            const balloonsConfig = [
+                { color: "#FF6B6B", cx: -25, cy: -80, path: "M-25 -80 Q-15 -50 0 -20" }, 
+                { color: "#4ECDC4", cx: 25, cy: -85, path: "M25 -85 Q15 -50 0 -20" },   
+                { color: "#FFE66D", cx: 0, cy: -95, path: "M0 -95 Q5 -50 0 -20" },     
+                { color: "#FF9F43", cx: -35, cy: -50, path: "M-35 -50 Q-20 -35 0 -20" }, 
+                { color: "#A29BFE", cx: 35, cy: -55, path: "M35 -55 Q20 -35 0 -20" },   
+                { color: "#54a0ff", cx: 0, cy: -115, path: "M0 -115 Q-8 -60 0 -20" },     
+            ];
+            
+            let bearTransform = "translate(100, 160)"; 
+            let bearGroupClass = "ease-in-out"; 
+            
+            if (status === 'won') { 
+                bearTransform = "translate(100, -350)"; 
+                bearGroupClass += " transition-slow-fly"; 
+            } else if (status === 'lost') { 
+                bearTransform = "translate(100, 240) rotate(180)"; 
+                bearGroupClass += " transition-all duration-1000";
+            } else { 
+                const dropAmount = mistakes * 12; 
+                bearTransform = `translate(100, ${160 + dropAmount})`;
+                bearGroupClass += " transition-all duration-1000";
+            }
+
+            return (
+                <div className="relative w-full h-full bg-sky-100 rounded-3xl overflow-hidden border-4 border-sky-200 shadow-inner flex flex-col">
+                    {/* 灑花放在這 */}
+                    {status === 'won' && <Confetti />}
+
+                    <svg viewBox="0 0 200 280" className="w-full h-full flex-1" preserveAspectRatio="xMidYMid meet">
+                        {/* 遠景山脈 */}
+                        <path d="M0 260 L50 200 L120 260 Z" fill="#C8E6C9" opacity="0.8" />
+                        <path d="M100 260 L160 180 L220 260 Z" fill="#A5D6A7" opacity="0.8" />
+                        
+                        {/* 雲朵動畫層 */}
+                        <g opacity="0.7">
+                            <g className="animate-sway" style={{ animationDuration: '8s' }}>
+                                <path d="M20 40 Q30 20 50 30 Q70 20 80 40 Q90 40 85 55 Q30 60 20 40" fill="white" />
+                            </g>
+                            <g className="animate-sway" style={{ animationDuration: '12s', animationDelay: '2s' }}>
+                                <path d="M140 80 Q150 60 170 70 Q190 60 200 80 Q210 80 205 95 Q150 100 140 80" fill="white" />
+                            </g>
+                        </g>
+                        
+                        <path d="M0 260 Q100 255 200 260 L200 280 L0 280 Z" fill="#81C784" />
+                        
+                        <g transform={bearTransform} className={bearGroupClass}>
+                            {balloonsConfig.map((b, i) => (
+                                i < remainingBalloons && (
+                                <g key={`balloon-group-${i}`} className="animate-sway" style={{ animationDuration: `${3 + i * 0.5}s`, animationDelay: `${i * 0.2}s`, transformOrigin: '0 -20px' }}>
+                                    {/* 繩子：改用曲線 */}
+                                    <path d={b.path} stroke="#aaa" strokeWidth="1" fill="none" opacity="0.8" />
+                                    
+                                    {/* 氣球本體 */}
+                                    <ellipse cx={b.cx} cy={b.cy} rx="14" ry="17" fill={b.color} />
+                                    {/* 氣球高光與立體感 */}
+                                    <ellipse cx={b.cx - 5} cy={b.cy - 6} rx="4" ry="6" fill="white" opacity="0.3" transform={`rotate(-30 ${b.cx - 5} ${b.cy - 6})`} />
+                                    <path d={`M${b.cx-6} ${b.cy-6} Q${b.cx} ${b.cy-12} ${b.cx+4} ${b.cy-8}`} stroke="white" strokeWidth="2" fill="none" opacity="0.2"/>
+                                    {/* 氣球結 */}
+                                    <polygon points={`${b.cx},${b.cy+16} ${b.cx-2},${b.cy+19} ${b.cx+2},${b.cy+19}`} fill={b.color} />
+                                </g>
+                                )
+                            ))}
+                            <AnimalSvg type={character} status={status} mistakes={mistakes} />
+                        </g>
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- 歡迎畫面 (輸入姓名) ---
+        const NameEntryScreen = ({ onStart }) => {
+            const [name, setName] = useState("");
+            
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (name.trim()) {
+                    onStart(name.trim());
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-yellow-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border-4 border-yellow-200 text-center relative overflow-hidden">
+                        <div className="mb-6 flex justify-center relative z-10">
+                             <div className="w-32 h-32 animate-bounce">
+                                <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                                    <g transform="translate(100, 100) scale(1)">
+                                        <AnimalSvg type="bear" status="won" mistakes={0} />
+                                    </g>
+                                </svg>
+                             </div>
+                        </div>
+                        <h1 className="text-3xl font-bold text-yellow-800 mb-2 relative z-10">Up to the Sky</h1>
+                        <p className="text-gray-500 mb-6 relative z-10">一起動動腦，回答問題保護氣球，幫助小動物們飛向美麗的青天！</p>
+                        
+                        <form onSubmit={handleSubmit} className="flex flex-col gap-4 relative z-10">
+                            <input 
+                                type="text" 
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="請輸入你的名字" 
+                                className="w-full p-4 text-center text-xl border-2 border-gray-300 rounded-xl focus:border-yellow-400 focus:ring-0 outline-none"
+                                autoFocus
+                                required
+                            />
+                            <button 
+                                type="submit" 
+                                className="w-full bg-yellow-400 hover:bg-yellow-500 text-white text-xl font-bold py-3 rounded-xl shadow-lg shadow-yellow-200 transition-transform active:scale-95"
+                            >
+                                開始遊戲
+                            </button>
+                        </form>
+
+                        {/* Background decoration */}
+                        <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
+                             <Confetti intensity="normal" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 完成畫面 ---
+        const CompletionScreen = ({ onRestart, playerName, totalTime }) => {
+            const celebrateAnimals = ['bear', 'rabbit', 'panda', 'cat', 'dog', 'penguin'];
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 animate-fade-in-up relative overflow-hidden">
+                    <Confetti intensity="high" />
+                    
+                    {/* 新增：氣球上升特效 */}
+                    <FlyingBalloons />
+                    
+                    <div className="z-10 relative">
+                        <div className="animate-trophy mb-6 relative z-10">
+                            {/* 手繪風格大獎盃 */}
+                            <svg viewBox="0 0 200 200" className="w-48 h-48 mx-auto drop-shadow-xl animate-trophy">
+                                <defs>
+                                    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style={{stopColor:"#FFECB3", stopOpacity:1}} />
+                                        <stop offset="50%" style={{stopColor:"#FFD54F", stopOpacity:1}} />
+                                        <stop offset="100%" style={{stopColor:"#FFC107", stopOpacity:1}} />
+                                    </linearGradient>
+                                </defs>
+                                {/* Base */}
+                                <path d="M60 160 L140 160 L150 180 L50 180 Z" fill="#FFA000" stroke="#F57C00" strokeWidth="2" />
+                                <rect x="70" y="140" width="60" height="20" fill="#FFC107" stroke="#FFA000" strokeWidth="2" />
+                                
+                                {/* Connector (Neck) - Now drawn BEFORE Cup Body */}
+                                <rect x="90" y="90" width="20" height="50" fill="#FFC107" stroke="#FFA000" strokeWidth="2" />
+                                
+                                {/* Handles */}
+                                <path d="M50 50 Q20 50 20 80 Q20 100 55 90" fill="none" stroke="#FFC107" strokeWidth="8" />
+                                <path d="M150 50 Q180 50 180 80 Q180 100 145 90" fill="none" stroke="#FFC107" strokeWidth="8" />
+                                
+                                {/* Cup Body - Updated Shape & Position */}
+                                <path d="M50 40 L150 40 L130 100 Q100 160 70 100 Z" fill="url(#goldGradient)" stroke="#FFA000" strokeWidth="2" />
+                                
+                                {/* Star */}
+                                <path d="M100 70 L105 85 L120 85 L108 95 L112 110 L100 100 L88 110 L92 95 L80 85 L95 85 Z" fill="#FFF" opacity="0.6" />
+                            </svg>
+                        </div>
+                        <h2 className="text-3xl font-bold text-yellow-800 mb-2">{playerName}，太棒了！</h2>
+                        <p className="text-xl text-yellow-600 mb-2">你已經完成了這一課所有的練習！</p>
+                        <p className="text-lg text-yellow-700 mb-8 font-bold">總耗時：{totalTime}</p>
+                        <button 
+                            onClick={onRestart}
+                            className="bg-yellow-400 hover:bg-yellow-500 text-white text-xl font-bold py-4 px-12 rounded-full shadow-lg shadow-yellow-200 transition-transform active:scale-95 flex items-center gap-2 mx-auto cursor-pointer"
+                        >
+                            <RefreshCw size={24} /> 重新開始
+                        </button>
+                    </div>
+
+                    {/* Dancing Animals at the bottom */}
+                    <div className="absolute bottom-0 left-0 w-full flex justify-center items-end gap-2 sm:gap-6 pb-4 opacity-90">
+                        {celebrateAnimals.map((char, index) => (
+                            <div 
+                                key={char} 
+                                className="w-20 h-20 sm:w-28 sm:h-28 animate-bounce" 
+                                style={{ 
+                                    animationDuration: `${0.8 + (index % 2) * 0.2}s`, 
+                                    animationDelay: `${index * 0.1}s` 
+                                }}
+                            >
+                                <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                                    <g transform="translate(100, 120) scale(0.9)">
+                                        <AnimalSvg type={char} status="won" mistakes={0} />
+                                    </g>
+                                </svg>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const LessonSelectorModal = ({ isOpen, onClose, allLessons, selectedLessons, onToggle }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-yellow-200 max-h-[80vh] flex flex-col transform transition-all scale-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-yellow-800 flex items-center gap-2">
+                                <ListChecks size={24} /> 自選課程範圍
+                            </h2>
+                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
+                            {allLessons.map(lesson => (
+                                <label key={lesson} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${selectedLessons.includes(lesson) ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-200 hover:border-gray-300'}`}>
+                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${selectedLessons.includes(lesson) ? 'bg-yellow-400 border-yellow-400' : 'border-gray-300'}`}>
+                                        {selectedLessons.includes(lesson) && <Check size={16} className="text-white" />}
+                                    </div>
+                                    <span className="font-bold text-gray-700">{lesson}</span>
+                                    <input type="checkbox" className="hidden" checked={selectedLessons.includes(lesson)} onChange={() => onToggle(lesson)} />
+                                </label>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button onClick={() => allLessons.forEach(l => !selectedLessons.includes(l) && onToggle(l))} className="flex-1 py-2 text-yellow-600 font-bold text-sm hover:bg-yellow-50 rounded-lg transition-colors">全選</button>
+                            <button onClick={() => selectedLessons.forEach(l => onToggle(l))} className="flex-1 py-2 text-gray-400 font-bold text-sm hover:bg-gray-50 rounded-lg transition-colors">全不選</button>
+                        </div>
+                        
+                        <button onClick={onClose} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-white py-3 rounded-xl font-bold text-lg shadow-lg shadow-yellow-200 transition-transform active:scale-95">
+                            開始遊戲 ({selectedLessons.length} 課)
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const CustomInputModal = ({ isOpen, onClose, onConfirm }) => {
+            const [text, setText] = useState("");
+            if (!isOpen) return null;
+
+            const handleConfirm = () => {
+                const sentences = [];
+                const lines = text.split('\n');
+                lines.forEach(line => {
+                    const trimmed = line.trim();
+                    if (trimmed) {
+                        const parts = trimmed.split(/[:：]/);
+                        let content = parts.length > 1 ? parts[1] : parts[0];
+                        const segments = content.split(/[，。？！、;；,?!]/).filter(s => s.trim().length > 0);
+                        
+                        for (let i = 0; i < segments.length; i++) {
+                            let seg = segments[i].trim();
+                            // 自動合併短句
+                            while (seg.length <= 4 && i < segments.length - 1) {
+                                i++;
+                                seg = seg + "，" + segments[i].trim();
+                            }
+                            if (seg.length >= 2) {
+                                sentences.push({ lesson: "自填題目", sentence: seg });
+                            }
+                        }
+                    }
+                });
+
+                if (sentences.length === 0) {
+                    alert("請輸入至少一個句子！");
+                    return;
+                }
+                onConfirm(sentences);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-yellow-200 flex flex-col">
+                        <h2 className="text-xl font-bold text-yellow-800 mb-4 flex items-center gap-2">
+                            <Edit size={24} /> 自填題目
+                        </h2>
+                        <p className="text-sm text-gray-500 mb-2">請輸入句子，一行一句 (系統會自動依標點符號斷句)</p>
+                        <textarea 
+                            className="w-full h-40 p-3 border-2 border-gray-300 rounded-xl focus:border-yellow-400 focus:ring-0 outline-none resize-none mb-4"
+                            placeholder="例如：&#10;今天天氣很好。&#10;我想去公園玩。"
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={onClose} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors">取消</button>
+                            <button onClick={handleConfirm} className="flex-1 py-3 bg-yellow-400 text-white font-bold rounded-xl hover:bg-yellow-500 transition-colors shadow-lg active:scale-95">開始遊戲</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [playerName, setPlayerName] = useState(null);
+            const [currentRound, setCurrentRound] = useState(null);
+            const [guessedChars, setGuessedChars] = useState(new Set());
+            const [mistakes, setMistakes] = useState(0);
+            const [status, setStatus] = useState('start'); 
+            const [keyboard, setKeyboard] = useState([]);
+            const [selectedLesson, setSelectedLesson] = useState('全部');
+            const [selectedChar, setSelectedChar] = useState('bear'); 
+            const [soundEnabled, setSoundEnabled] = useState(true);
+            const [isFullScreen, setIsFullScreen] = useState(false);
+            
+            // 自選課程相關狀態
+            const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
+            const [customLessons, setCustomLessons] = useState([]);
+            const [isInputModalOpen, setIsInputModalOpen] = useState(false);
+            const [userSentences, setUserSentences] = useState([]);
+
+            const [questionQueue, setQuestionQueue] = useState([]);
+            
+            // Timer state
+            const [totalTime, setTotalTime] = useState(0);
+
+            const MAX_MISTAKES = 6;
+            const isSymbol = (char) => /[，。？！、：；?!\s,.]/.test(char);
+            const LIFE_BALLOONS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#FF9F43", "#A29BFE", "#54a0ff"];
+            const CHARACTERS = [
+                { id: 'bear', name: '小熊', icon: '🐻' }, { id: 'rabbit', name: '兔子', icon: '🐰' }, { id: 'cat', name: '小貓', icon: '🐱' },
+                { id: 'dog', name: '小狗', icon: '🐶' }, { id: 'panda', name: '熊貓', icon: '🐼' }, { id: 'penguin', name: '企鵝', icon: '🐧' },
+            ];
+
+            // 新增：隨機獲取一個角色 ID
+            const getRandomChar = () => {
+                const randomIndex = Math.floor(Math.random() * CHARACTERS.length);
+                return CHARACTERS[randomIndex].id;
+            };
+
+            const uniqueLessons = useMemo(() => [...new Set(SENTENCE_DB.map(item => item.lesson))], []);
+
+            // 初始化 customLessons 為全部課程
+            useEffect(() => {
+                if (uniqueLessons.length > 0 && customLessons.length === 0) {
+                    setCustomLessons(uniqueLessons);
+                }
+            }, [uniqueLessons]);
+
+            // Timer logic
+            useEffect(() => {
+                let interval;
+                if (status === 'playing') {
+                    interval = setInterval(() => {
+                        setTotalTime(prev => prev + 1);
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [status]);
+
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const toggleFullScreen = () => {
+                if (!document.fullscreenElement) {
+                    // 嘗試進入全螢幕，如果失敗則忽略（可能是權限問題）
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen()
+                            .then(() => setIsFullScreen(true))
+                            .catch(err => {
+                                console.warn("Fullscreen request denied:", err);
+                                // 可以選擇顯示提示，或直接忽略
+                            });
+                    }
+                } else {
+                    if (document.exitFullscreen) { 
+                        document.exitFullscreen()
+                            .then(() => setIsFullScreen(false))
+                            .catch(err => console.warn("Exit fullscreen failed:", err));
+                    }
+                }
+            };
+
+            useEffect(() => {
+                const handleFsChange = () => setIsFullScreen(!!document.fullscreenElement);
+                document.addEventListener("fullscreenchange", handleFsChange);
+                return () => document.removeEventListener("fullscreenchange", handleFsChange);
+            }, []);
+
+            const toggleCustomLesson = (lesson) => {
+                setCustomLessons(prev => {
+                    if (prev.includes(lesson)) return prev.filter(l => l !== lesson);
+                    return [...prev, lesson];
+                });
+            };
+
+            const initSession = (lessonOverride) => {
+                let pool = [];
+                const mode = lessonOverride !== undefined ? lessonOverride : selectedLesson;
+
+                if (mode === 'user_input') {
+                    pool = [...userSentences];
+                } else if (mode === 'custom') {
+                    if (customLessons.length === 0) {
+                        alert("請至少選擇一課！");
+                        setIsLessonModalOpen(true);
+                        return;
+                    }
+                    pool = SENTENCE_DB.filter(item => customLessons.includes(item.lesson));
+                } else if (mode === '全部') {
+                    pool = [...SENTENCE_DB];
+                } else {
+                    pool = SENTENCE_DB.filter(item => item.lesson === mode);
+                }
+
+                if (pool.length === 0) return;
+
+                // 洗牌
+                for (let i = pool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [pool[i], pool[j]] = [pool[j], pool[i]];
+                }
+
+                setQuestionQueue(pool);
+                setTotalTime(0); // 重置計時器
+                
+                // 開始新的一輪時，隨機設定角色
+                setSelectedChar(getRandomChar());
+                
+                nextRoundHelper(pool);
+            };
+
+            const nextRound = () => {
+                nextRoundHelper(questionQueue);
+            };
+
+            const nextRoundHelper = (currentQueue) => {
+                if (currentQueue.length === 0) {
+                    setStatus('complete');
+                    playSound('complete', soundEnabled);
+                    return;
+                }
+
+                // 進入下一題時，也隨機切換角色
+                setSelectedChar(getRandomChar());
+
+                const newQueue = [...currentQueue];
+                const roundData = newQueue.pop(); // 取出最後一個
+                setQuestionQueue(newQueue); // 更新佇列
+
+                const sentenceChars = roundData.sentence.split('');
+                const targetChars = new Set(sentenceChars.filter(c => !isSymbol(c)));
+
+                // 干擾字邏輯
+                let allowedDistractorChars = new Set();
+                const mode = selectedLesson; 
+                
+                if (mode === 'user_input') {
+                    CHAR_POOL.forEach(c => allowedDistractorChars.add(c));
+                } else {
+                    const currentLessonIndex = uniqueLessons.indexOf(roundData.lesson);
+                    // 如果找不到課程(例如自選範圍混合)，就預設全部
+                    const maxIndex = currentLessonIndex === -1 ? uniqueLessons.length - 1 : currentLessonIndex;
+                    
+                    for (let i = 0; i <= maxIndex; i++) {
+                        const lessonName = uniqueLessons[i];
+                        if (LESSON_CHAR_MAP[lessonName]) {
+                            LESSON_CHAR_MAP[lessonName].forEach(c => allowedDistractorChars.add(c));
+                        }
+                    }
+                }
+                
+                const validDistractors = Array.from(allowedDistractorChars).filter(c => !targetChars.has(c));
+                const distractors = [];
+                let safetyCounter = 0;
+                while (distractors.length < 8 && safetyCounter < 100) {
+                    if (validDistractors.length === 0) break;
+                    const randomIndex = Math.floor(Math.random() * validDistractors.length);
+                    const randomChar = validDistractors[randomIndex];
+                    if (!distractors.includes(randomChar)) distractors.push(randomChar);
+                    safetyCounter++;
+                }
+
+                const mixedChars = [...Array.from(targetChars), ...distractors];
+                for (let i = mixedChars.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [mixedChars[i], mixedChars[j]] = [mixedChars[j], mixedChars[i]];
+                }
+
+                setCurrentRound(roundData);
+                setGuessedChars(new Set());
+                setMistakes(0);
+                setKeyboard(mixedChars);
+                setStatus('playing');
+            };
+
+            const handleLessonChange = (e) => {
+                const newLesson = e.target.value;
+                if (newLesson === 'custom') {
+                    setSelectedLesson('custom');
+                    setIsLessonModalOpen(true);
+                } else if (newLesson === 'user_input') {
+                    setIsInputModalOpen(true);
+                } else {
+                    setSelectedLesson(newLesson);
+                    initSession(newLesson); // 切換課程時，重置 Session
+                }
+            };
+
+            const handleUserSentencesConfirm = (sentences) => {
+                setUserSentences(sentences);
+                setIsInputModalOpen(false);
+                setSelectedLesson('user_input');
+                setTimeout(() => initSession('user_input'), 0);
+            };
+
+            const handleGuess = (char) => {
+                if (status !== 'playing' || guessedChars.has(char)) return;
+                const newGuessed = new Set(guessedChars);
+                newGuessed.add(char);
+                setGuessedChars(newGuessed);
+
+                const isCorrect = currentRound.sentence.includes(char);
+                if (!isCorrect) {
+                    const newMistakes = mistakes + 1;
+                    setMistakes(newMistakes);
+                    playSound('wrong', soundEnabled);
+                    if (newMistakes >= MAX_MISTAKES) {
+                        setStatus('lost');
+                        playSound('lose', soundEnabled);
+                    }
+                } else {
+                    playSound('correct', soundEnabled);
+                    const remaining = currentRound.sentence.split('').filter(c => !isSymbol(c) && !newGuessed.has(c));
+                    if (remaining.length === 0) {
+                        setStatus('won');
+                        setTimeout(() => playSound('win', soundEnabled), 300);
+                        if (soundEnabled) speakSentence(currentRound.sentence);
+                    }
+                }
+            };
+            
+            const handleShare = () => {
+                const url = new URL(window.location.href);
+                if (selectedLesson !== '全部' && selectedLesson !== 'custom' && selectedLesson !== 'user_input') {
+                    url.searchParams.set('lesson', selectedLesson);
+                } else {
+                    url.searchParams.delete('lesson');
+                }
+                
+                const textToCopy = url.toString();
+
+                // 使用傳統的 execCommand 方式，因為它在 iframe 中的兼容性較好
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                
+                // 隱藏 textarea
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                         alert('連結已複製！傳送給學生即可練習此課程。\n\n' + textToCopy);
+                    } else {
+                        throw new Error('Copy failed');
+                    }
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                    prompt("請手動複製連結：", textToCopy);
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            };
+
+            useEffect(() => {
+                // 檢查網址參數
+                const params = new URLSearchParams(window.location.search);
+                const lessonParam = params.get('lesson');
+                
+                if (lessonParam && uniqueLessons.includes(lessonParam)) {
+                    setSelectedLesson(lessonParam);
+                    initSession(lessonParam);
+                } else {
+                    // We don't initSession here yet if no name, waiting for name entry
+                }
+            }, []); // Empty dependency array ensures this runs once on mount
+
+            if (!playerName) {
+                return <NameEntryScreen onStart={(name) => {
+                    setPlayerName(name);
+                    // Start session after name is entered
+                    const params = new URLSearchParams(window.location.search);
+                    const lessonParam = params.get('lesson');
+                    if (lessonParam && uniqueLessons.includes(lessonParam)) {
+                         initSession(lessonParam);
+                    } else {
+                         initSession('全部');
+                    }
+                }} />;
+            }
+
+            if (!currentRound && status !== 'complete') return <div className="h-screen w-screen flex items-center justify-center bg-yellow-50 font-bold text-gray-500">載入中...</div>;
+
+            return (
+                <div className="h-full w-full flex flex-col items-center justify-center p-2 select-none">
+                    
+                    <LessonSelectorModal 
+                        isOpen={isLessonModalOpen} 
+                        onClose={() => {
+                            setIsLessonModalOpen(false);
+                            initSession('custom');
+                        }}
+                        allLessons={uniqueLessons}
+                        selectedLessons={customLessons}
+                        onToggle={toggleCustomLesson}
+                    />
+
+                    <CustomInputModal 
+                        isOpen={isInputModalOpen}
+                        onClose={() => {
+                            setIsInputModalOpen(false);
+                            if (selectedLesson === 'user_input') setSelectedLesson('全部');
+                        }}
+                        onConfirm={handleUserSentencesConfirm}
+                    />
+
+                    <div className="flex flex-col w-full h-full max-w-6xl max-h-full bg-white rounded-xl sm:rounded-3xl shadow-2xl border-4 border-yellow-200 overflow-hidden">
+                        {/* Header */}
+                        <div className="shrink-0 bg-yellow-300 p-3 flex flex-col md:flex-row justify-between items-center border-b-4 border-yellow-200 gap-2">
+                            <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto">
+                                <div className="flex items-center gap-1 font-bold text-yellow-800 text-lg mr-2">
+                                     <User size={20} className="text-yellow-700" /> Hi, {playerName}
+                                </div>
+                                <div className="flex items-center gap-1 font-bold text-yellow-800 text-lg mr-2 bg-white/50 px-2 py-1 rounded-lg">
+                                     <Clock size={20} className="text-yellow-700" /> {formatTime(totalTime)}
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-white/50 p-1 rounded-lg">
+                                    <BookOpen size={20} className="text-yellow-700 ml-1 shrink-0" />
+                                    <select value={selectedLesson} onChange={handleLessonChange} className="bg-transparent border-none text-yellow-800 font-bold focus:ring-0 cursor-pointer py-1 pl-1 pr-4 text-sm outline-none max-w-[130px] sm:max-w-none">
+                                        <option value="全部">全部課程隨機</option>
+                                        <option value="custom">自選範圍...</option>
+                                        <option value="user_input">自填題目...</option>
+                                        <hr />
+                                        {uniqueLessons.map(lesson => <option key={lesson} value={lesson}>{lesson}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-1 bg-white/50 p-1 rounded-lg">
+                                    <Smile size={20} className="text-yellow-700 ml-1 shrink-0" />
+                                    <select value={selectedChar} onChange={(e) => setSelectedChar(e.target.value)} className="bg-transparent border-none text-yellow-800 font-bold focus:ring-0 cursor-pointer py-1 pl-1 pr-4 text-sm outline-none">
+                                        {CHARACTERS.map(char => <option key={char.id} value={char.id}>{char.icon} {char.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 rounded-full bg-white/50 text-yellow-800 hover:bg-white/80 active:scale-95 transition-all" title="開關音效">
+                                        {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                                    </button>
+                                    <button onClick={handleShare} className="p-2 rounded-full bg-white/50 text-yellow-800 hover:bg-white/80 active:scale-95 transition-all" title="分享本課連結">
+                                        <Share2 size={20} />
+                                    </button>
+                                    <button onClick={toggleFullScreen} className="p-2 rounded-full bg-white/50 text-yellow-800 hover:bg-white/80 active:scale-95 transition-all" title={isFullScreen ? "退出全螢幕" : "全螢幕模式"}>
+                                        {isFullScreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex gap-1 bg-white/50 px-3 py-1 rounded-full items-center">
+                                {LIFE_BALLOONS.map((color, i) => (
+                                    <div key={i} className={`transition-all duration-500 transform ${i < (MAX_MISTAKES - mistakes) ? 'opacity-100 scale-100' : 'opacity-20 scale-75 grayscale'}`}>
+                                        <svg width="20" height="24" viewBox="0 0 24 32" className="drop-shadow-sm overflow-visible"><path d="M12 22 L12 28" stroke="#888" strokeWidth="1.5" /><ellipse cx="12" cy="12" rx="10" ry="12" fill={color} /><ellipse cx="8" cy="8" rx="3" ry="5" fill="white" opacity="0.4" transform="rotate(-30 8 8)" /></svg>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {status === 'complete' ? (
+                            <CompletionScreen onRestart={() => initSession()} playerName={playerName} totalTime={formatTime(totalTime)} />
+                        ) : (
+                            <>
+                                {/* Info Banner */}
+                                <div className="shrink-0 bg-yellow-100/50 py-1 text-center text-xs md:text-sm text-yellow-600 font-bold">
+                                    {selectedLesson === 'custom' ? `自選範圍` : (selectedLesson === 'user_input' ? '自填題目' : (selectedLesson === '全部' ? '全部課程' : currentRound?.lesson))} 
+                                    - 剩餘題目：{questionQueue.length + 1}
+                                </div>
+
+                                {/* Main Content: Flexible Height */}
+                                <div className="flex-1 flex flex-col p-2 md:p-6 overflow-hidden">
+                                    <div className="flex-1 relative w-full min-h-[200px] mb-4">
+                                        <BalloonAnimal mistakes={mistakes} maxMistakes={MAX_MISTAKES} status={status} character={selectedChar} />
+                                    </div>
+
+                                    <div className="shrink-0 flex flex-col gap-4">
+                                        {/* Puzzle */}
+                                        <div className="flex flex-wrap justify-center gap-2 min-h-[50px]">
+                                            {currentRound?.sentence.split('').map((char, index) => {
+                                                const isPunctuation = isSymbol(char);
+                                                const isRevealed = isPunctuation || guessedChars.has(char) || status === 'lost';
+                                                const isMissed = status === 'lost' && !guessedChars.has(char) && !isPunctuation;
+                                                return (
+                                                    <div key={index} className="flex flex-col items-center">
+                                                        <div className={`w-10 h-10 sm:w-14 sm:h-14 flex items-center justify-center text-xl sm:text-3xl font-bold rounded-lg transition-all duration-300 shadow-sm ${isPunctuation ? 'bg-transparent text-gray-400 shadow-none' : isRevealed ? (isMissed ? 'bg-red-100 text-red-500 border-2 border-red-200' : 'bg-blue-100 text-blue-600 border-b-4 border-blue-200 scale-105') : 'bg-gray-100 border-b-4 border-gray-300'}`}>
+                                                            {isRevealed ? char : ''}
+                                                        </div>
+                                                        {!isPunctuation && <div className="w-8 h-1 bg-gray-200 mt-1 rounded-full"></div>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Status Message */}
+                                        {status !== 'playing' && (
+                                            <div className={`text-center p-3 rounded-xl border-2 animate-bounce ${status === 'won' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-red-100 border-red-300 text-red-700'}`}>
+                                                <div className="flex justify-center items-center gap-2 text-xl font-bold">
+                                                    {status === 'won' ? <Smile size={28}/> : <Frown size={28}/>}
+                                                    {status === 'won' ? "太棒了！飛向天空！" : "哎呀，掉下來了！再試一次！"}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Keyboard */}
+                                        <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 sm:gap-3">
+                                            {keyboard.map((char, i) => {
+                                                const isGuessed = guessedChars.has(char);
+                                                const isTarget = currentRound?.sentence.includes(char);
+                                                let btnClass = "bg-white border-2 border-b-4 border-gray-200 text-gray-700 hover:bg-gray-50 active:border-b-2 active:translate-y-[2px]";
+                                                if (isGuessed) { btnClass = isTarget ? "bg-green-400 border-green-600 text-white border-b-4 opacity-50 cursor-not-allowed transform-none shadow-inner" : "bg-red-300 border-red-500 text-white border-b-4 opacity-30 cursor-not-allowed transform-none"; }
+                                                else if (status !== 'playing') { btnClass = "bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed transform-none"; }
+                                                return <button key={`${char}-${i}`} onClick={() => handleGuess(char)} disabled={isGuessed || status !== 'playing'} className={`h-12 sm:h-14 rounded-xl text-xl sm:text-2xl font-bold transition-all touch-manipulation ${btnClass}`}>{char}</button>;
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Footer */}
+                                <div className="shrink-0 bg-gray-50 p-3 md:p-4 border-t border-gray-100 flex justify-center">
+                                    {status === 'lost' ? (
+                                        <button onClick={() => {
+                                            // 失敗時，不進入下一題，而是重玩同一題 (這裡的邏輯可以選擇把題目放回佇列或直接重置狀態)
+                                            // 簡單做法：保持 currentRound 不變，重置狀態
+                                            setGuessedChars(new Set());
+                                            setMistakes(0);
+                                            setStatus('playing');
+                                        }} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl"><RefreshCw size={24} />再試一次</button>
+                                    ) : (
+                                        status !== 'playing' ? 
+                                        <button onClick={nextRound} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl"><RefreshCw size={24} />下一題</button> 
+                                        : <div className="text-gray-400 text-sm md:text-base flex items-center gap-1 animate-pulse"><Star size={18} className="text-yellow-400 fill-yellow-400"/>{mistakes === 0 ? "加油！別讓氣球破掉！" : "小心，氣球越來越少了！"}</div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <div className="shrink-0 mt-2 text-gray-400 text-xs text-center"><div>學華語向前走第二冊</div><div className="mt-1 font-medium text-gray-300">Design by Sophia Wong</div></div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
+    </script>
+</body>
+</html>
