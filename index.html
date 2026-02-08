@@ -725,7 +725,7 @@
                     
                     <div className="z-10 relative">
                         <div className="animate-trophy mb-6 relative z-10">
-                            {/* 手繪風格大獎盃 */}
+                            {/* 手繪風格大獎盃 - 修正：頸部移到杯身下層 */}
                             <svg viewBox="0 0 200 200" className="w-48 h-48 mx-auto drop-shadow-xl animate-trophy">
                                 <defs>
                                     <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1134,11 +1134,9 @@
                 
                 const textToCopy = url.toString();
 
-                // 使用傳統的 execCommand 方式，因為它在 iframe 中的兼容性較好
                 const textArea = document.createElement("textarea");
                 textArea.value = textToCopy;
                 
-                // 隱藏 textarea
                 textArea.style.position = "fixed";
                 textArea.style.left = "-9999px";
                 textArea.style.top = "0";
