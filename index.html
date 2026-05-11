@@ -66,7 +66,7 @@
         }
         /* 慢速飛行過渡 */
         .transition-slow-fly {
-            transition-property: all;
+            transition-property: transform;
             transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
             transition-duration: 3000ms; /* 3秒慢速飛行 */
         }
@@ -606,14 +606,14 @@
             let bearGroupClass = "ease-in-out"; 
             
             if (status === 'won') { 
-                bearTransform = "translate(100, -350)"; 
+                bearTransform = "translate(100, -60)"; // 縮短飛行距離
                 bearGroupClass += " transition-slow-fly"; 
             } else if (status === 'lost') { 
                 bearTransform = "translate(100, 240) rotate(180)"; 
                 bearGroupClass += " transition-all duration-1000";
             } else { 
                 const dropAmount = mistakes * 12; 
-                bearTransform = `translate(100, ${160 + dropAmount})`;
+                bearTransform = `translate(100, ${170 + dropAmount})`;
                 bearGroupClass += " transition-all duration-1000";
             }
 
