@@ -202,14 +202,13 @@
                 osc.start(now);
                 osc.stop(now + 0.6);
             } else if (type === 'complete') {
-                // 大獎勵音效
                 osc.type = 'square';
-                osc.frequency.setValueAtTime(523.25, now); // C5
-                osc.frequency.setValueAtTime(659.25, now + 0.15); // E5
-                osc.frequency.setValueAtTime(783.99, now + 0.3); // G5
-                osc.frequency.setValueAtTime(1046.50, now + 0.45); // C6
-                osc.frequency.setValueAtTime(783.99, now + 0.6); // G5
-                osc.frequency.setValueAtTime(1046.50, now + 0.75); // C6
+                osc.frequency.setValueAtTime(523.25, now); 
+                osc.frequency.setValueAtTime(659.25, now + 0.15); 
+                osc.frequency.setValueAtTime(783.99, now + 0.3); 
+                osc.frequency.setValueAtTime(1046.50, now + 0.45); 
+                osc.frequency.setValueAtTime(783.99, now + 0.6); 
+                osc.frequency.setValueAtTime(1046.50, now + 0.75); 
                 gainNode.gain.setValueAtTime(0.1, now);
                 gainNode.gain.linearRampToValueAtTime(0.01, now + 1.2);
                 osc.start(now);
@@ -313,7 +312,7 @@
 姑姑：大文，你看起來瘦了。
 大文：我沒瘦，我長高了。
 姑姑：文文現在也跟你一起去學華語嗎?
-大文：是啊！上中文課很有意思。
+大文：是啊！上華語課很有意思。
 姑姑：你好好學華語，以後可以用網路給我寫信。
 大文：沒問題，我一定會好好學華語。
 `;
@@ -344,22 +343,33 @@
                              }
                         }
 
-                        // 先根據標點符號分割
-                        const rawSegments = fullSentence.split(/[，。？！、;；,?!]/).filter(s => s.trim().length > 0);
+                        // 先根據標點符號分割 (已移除頓號，避免名詞被過度切割)
+                        const rawSegments = fullSentence.split(/[，。？！;；,?!]/).filter(s => s.trim().length > 0);
+                        let sentenceData = [];
                         
                         for (let i = 0; i < rawSegments.length; i++) {
                             let seg = rawSegments[i].trim();
                             
-                            // 合併短句邏輯
+                            // 合併短句邏輯 (小於等於4個字就跟下一句合併)
                             while (seg.length <= 4 && i < rawSegments.length - 1) {
                                 i++; 
                                 seg = seg + "，" + rawSegments[i].trim();
                             }
-                            
-                            if (seg.length >= 2) {
+                            sentenceData.push(seg);
+                        }
+
+                        // 如果最後一個片段還是太短，往回合併到前一個片段
+                        if (sentenceData.length > 1 && sentenceData[sentenceData.length - 1].length <= 3) {
+                            const last = sentenceData.pop();
+                            sentenceData[sentenceData.length - 1] += "，" + last;
+                        }
+                        
+                        // 將結果推入資料庫，要求至少 4 個字才有挑戰性
+                        sentenceData.forEach(seg => {
+                            if (seg.length >= 4) {
                                 data.push({ lesson: currentLesson, sentence: seg });
                             }
-                        }
+                        });
                     }
                 }
             });
@@ -367,6 +377,9 @@
         };
 
         const { data: SENTENCE_DB, allChars: CHAR_POOL, lessonCharMap: LESSON_CHAR_MAP } = parseData();
+
+        // 提取全域課程列表供初始化使用
+        const uniqueLessonsArray = [...new Set(SENTENCE_DB.map(item => item.lesson))];
 
         // --- 灑花特效組件 ---
         const Confetti = ({ intensity = 'normal' }) => {
@@ -729,7 +742,7 @@
                     
                     <div className="z-10 relative">
                         <div className="animate-trophy mb-6 relative z-10">
-                            {/* 手繪風格大獎盃 - 修正：頸部移到杯身下層 */}
+                            {/* 手繪風格大獎盃 */}
                             <svg viewBox="0 0 200 200" className="w-48 h-48 mx-auto drop-shadow-xl animate-trophy">
                                 <defs>
                                     <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -791,7 +804,19 @@
         };
 
         const LessonSelectorModal = ({ isOpen, onClose, allLessons, selectedLessons, onToggle }) => {
+            const [error, setError] = useState("");
+            
             if (!isOpen) return null;
+
+            const handleStart = () => {
+                if (selectedLessons.length === 0) {
+                    setError("請至少選擇一課喔！");
+                    return;
+                }
+                setError("");
+                onClose();
+            };
+
             return (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-yellow-200 max-h-[80vh] flex flex-col transform transition-all scale-100">
@@ -816,12 +841,14 @@
                             ))}
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 mb-4">
                             <button onClick={() => allLessons.forEach(l => !selectedLessons.includes(l) && onToggle(l))} className="flex-1 py-2 text-yellow-600 font-bold text-sm hover:bg-yellow-50 rounded-lg transition-colors">全選</button>
                             <button onClick={() => selectedLessons.forEach(l => onToggle(l))} className="flex-1 py-2 text-gray-400 font-bold text-sm hover:bg-gray-50 rounded-lg transition-colors">全不選</button>
                         </div>
                         
-                        <button onClick={onClose} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-white py-3 rounded-xl font-bold text-lg shadow-lg shadow-yellow-200 transition-transform active:scale-95">
+                        {error && <p className="text-red-500 text-sm font-bold text-center animate-pulse mb-2">{error}</p>}
+                        
+                        <button onClick={handleStart} className="w-full bg-yellow-400 hover:bg-yellow-500 text-white py-3 rounded-xl font-bold text-lg shadow-lg shadow-yellow-200 transition-transform active:scale-95">
                             開始遊戲 ({selectedLessons.length} 課)
                         </button>
                     </div>
@@ -831,6 +858,8 @@
 
         const CustomInputModal = ({ isOpen, onClose, onConfirm }) => {
             const [text, setText] = useState("");
+            const [error, setError] = useState("");
+            
             if (!isOpen) return null;
 
             const handleConfirm = () => {
@@ -841,8 +870,10 @@
                     if (trimmed) {
                         const parts = trimmed.split(/[:：]/);
                         let content = parts.length > 1 ? parts[1] : parts[0];
-                        const segments = content.split(/[，。？！、;；,?!]/).filter(s => s.trim().length > 0);
+                        // 移除「、」避免名詞列舉被切斷
+                        const segments = content.split(/[，。？！;；,?!]/).filter(s => s.trim().length > 0);
                         
+                        let tempSegs = [];
                         for (let i = 0; i < segments.length; i++) {
                             let seg = segments[i].trim();
                             // 自動合併短句
@@ -850,17 +881,28 @@
                                 i++;
                                 seg = seg + "，" + segments[i].trim();
                             }
-                            if (seg.length >= 2) {
+                            tempSegs.push(seg);
+                        }
+
+                        // 如果最後一個片段還是太短，往回合併
+                        if (tempSegs.length > 1 && tempSegs[tempSegs.length - 1].length <= 3) {
+                            const last = tempSegs.pop();
+                            tempSegs[tempSegs.length - 1] += "，" + last;
+                        }
+
+                        tempSegs.forEach(seg => {
+                            if (seg.length >= 4) {
                                 sentences.push({ lesson: "自填題目", sentence: seg });
                             }
-                        }
+                        });
                     }
                 });
 
                 if (sentences.length === 0) {
-                    alert("請輸入至少一個句子！");
+                    setError("請輸入有效且長度足夠的句子喔！");
                     return;
                 }
+                setError("");
                 onConfirm(sentences);
             };
 
@@ -877,6 +919,7 @@
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                         />
+                        {error && <p className="text-red-500 text-sm font-bold text-center animate-pulse mb-2">{error}</p>}
                         <div className="flex gap-2">
                             <button onClick={onClose} className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-colors">取消</button>
                             <button onClick={handleConfirm} className="flex-1 py-3 bg-yellow-400 text-white font-bold rounded-xl hover:bg-yellow-500 transition-colors shadow-lg active:scale-95">開始遊戲</button>
@@ -886,24 +929,110 @@
             );
         };
 
+        // --- 新增：分享專屬連結視窗 ---
+        const ShareModal = ({ isOpen, onClose, shareUrl }) => {
+            const [copied, setCopied] = useState(false);
+            if (!isOpen) return null;
+
+            const handleCopy = () => {
+                const copyFallback = () => {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = shareUrl;
+                    textArea.style.position = "fixed";
+                    textArea.style.opacity = "0";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try { document.execCommand('copy'); } catch(e) {}
+                    document.body.removeChild(textArea);
+                    setCopied(true);
+                    setTimeout(() => { setCopied(false); onClose(); }, 1500);
+                };
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                        setCopied(true);
+                        setTimeout(() => { setCopied(false); onClose(); }, 1500);
+                    }).catch(copyFallback);
+                } else {
+                    copyFallback();
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-4 border-yellow-200 flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-yellow-800 flex items-center gap-2">
+                                <Share2 size={24} /> 分享專屬連結
+                            </h2>
+                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-2 font-medium">已成功為您目前的課程範圍生成專屬連結，請複製並傳送給學生：</p>
+                        <textarea 
+                            className="w-full h-24 p-3 border-2 border-gray-300 rounded-xl outline-none resize-none mb-4 text-sm bg-gray-50 text-gray-600"
+                            readOnly
+                            value={shareUrl}
+                            onClick={(e) => e.target.select()}
+                        />
+                        <button onClick={handleCopy} className={`w-full py-3 font-bold text-lg rounded-xl transition-colors shadow-lg active:scale-95 text-white ${copied ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-400 hover:bg-yellow-500'}`}>
+                            {copied ? '✅ 已複製！' : '複製連結並關閉'}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
+            // 新增解析參數工具 (同時支援 search 和 hash，避免被平台吃掉)
+            const getUrlParams = () => {
+                const searchParams = new URLSearchParams(window.location.search);
+                const hashStr = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
+                const hashParams = new URLSearchParams(hashStr);
+                
+                return {
+                    lesson: hashParams.get('lesson') || searchParams.get('lesson'),
+                    customLessons: hashParams.get('custom_lessons') || searchParams.get('custom_lessons')
+                };
+            };
+
             const [playerName, setPlayerName] = useState(null);
             const [currentRound, setCurrentRound] = useState(null);
             const [guessedChars, setGuessedChars] = useState(new Set());
             const [mistakes, setMistakes] = useState(0);
             const [status, setStatus] = useState('start'); 
             const [keyboard, setKeyboard] = useState([]);
-            const [selectedLesson, setSelectedLesson] = useState('全部');
+            
+            const [selectedLesson, setSelectedLesson] = useState(() => {
+                const { lesson } = getUrlParams();
+                if (lesson === 'custom' || lesson === 'user_input' || uniqueLessonsArray.includes(lesson)) {
+                    return lesson;
+                }
+                return '全部';
+            });
+            
+            const [customLessons, setCustomLessons] = useState(() => {
+                const { lesson, customLessons: customParam } = getUrlParams();
+                if (lesson === 'custom' && customParam) {
+                    const parsed = customParam.split(',').filter(l => uniqueLessonsArray.includes(l));
+                    if (parsed.length > 0) return parsed;
+                }
+                return [...uniqueLessonsArray];
+            });
+
             const [selectedChar, setSelectedChar] = useState('bear'); 
             const [soundEnabled, setSoundEnabled] = useState(true);
             const [isFullScreen, setIsFullScreen] = useState(false);
             
-            // 自選課程相關狀態
+            // UI 控制狀態
             const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
-            const [customLessons, setCustomLessons] = useState([]);
             const [isInputModalOpen, setIsInputModalOpen] = useState(false);
+            const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+            const [shareUrl, setShareUrl] = useState("");
+            
             const [userSentences, setUserSentences] = useState([]);
-
             const [questionQueue, setQuestionQueue] = useState([]);
             
             // Timer state
@@ -923,14 +1052,7 @@
                 return CHARACTERS[randomIndex].id;
             };
 
-            const uniqueLessons = useMemo(() => [...new Set(SENTENCE_DB.map(item => item.lesson))], []);
-
-            // 初始化 customLessons 為全部課程
-            useEffect(() => {
-                if (uniqueLessons.length > 0 && customLessons.length === 0) {
-                    setCustomLessons(uniqueLessons);
-                }
-            }, [uniqueLessons]);
+            const uniqueLessons = uniqueLessonsArray;
 
             // Timer logic
             useEffect(() => {
@@ -950,21 +1072,22 @@
             };
 
             const toggleFullScreen = () => {
-                if (!document.fullscreenElement) {
-                    // 嘗試進入全螢幕，如果失敗則忽略（可能是權限問題）
-                    if (document.documentElement.requestFullscreen) {
-                        document.documentElement.requestFullscreen()
-                            .then(() => setIsFullScreen(true))
-                            .catch(err => {
-                                console.warn("Fullscreen request denied:", err);
-                                // 可以選擇顯示提示，或直接忽略
-                            });
+                const doc = window.document;
+                const docEl = doc.documentElement;
+                const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+                if (!isFs) {
+                    const requestMethod = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+                    if (requestMethod) {
+                        const promise = requestMethod.call(docEl);
+                        if (promise && typeof promise.then === 'function') {
+                            promise.catch(err => console.warn("全螢幕請求失敗:", err));
+                        }
                     }
                 } else {
-                    if (document.exitFullscreen) { 
-                        document.exitFullscreen()
-                            .then(() => setIsFullScreen(false))
-                            .catch(err => console.warn("Exit fullscreen failed:", err));
+                    const exitMethod = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+                    if (exitMethod) {
+                         exitMethod.call(doc);
                     }
                 }
             };
@@ -982,19 +1105,17 @@
                 });
             };
 
-            const initSession = (lessonOverride) => {
+            const initSession = (lessonOverride, customLessonsOverride) => {
                 let pool = [];
                 const mode = lessonOverride !== undefined ? lessonOverride : selectedLesson;
 
                 if (mode === 'user_input') {
                     pool = [...userSentences];
                 } else if (mode === 'custom') {
-                    if (customLessons.length === 0) {
-                        alert("請至少選擇一課！");
-                        setIsLessonModalOpen(true);
-                        return;
-                    }
-                    pool = SENTENCE_DB.filter(item => customLessons.includes(item.lesson));
+                    const activeCustomLessons = customLessonsOverride || customLessons;
+                    if (activeCustomLessons.length === 0) return;
+                    
+                    pool = SENTENCE_DB.filter(item => activeCustomLessons.includes(item.lesson));
                 } else if (mode === '全部') {
                     pool = [...SENTENCE_DB];
                 } else {
@@ -1129,67 +1250,31 @@
             };
             
             const handleShare = () => {
-                const url = new URL(window.location.href);
-                if (selectedLesson !== '全部' && selectedLesson !== 'custom' && selectedLesson !== 'user_input') {
-                    url.searchParams.set('lesson', selectedLesson);
-                } else {
-                    url.searchParams.delete('lesson');
+                const url = new URL(window.location.origin + window.location.pathname);
+                const hashParams = new URLSearchParams();
+                
+                // 設定課程參數 (改用 Hash 參數，避免被某些平台或伺服器吃掉 query string)
+                if (selectedLesson === 'custom') {
+                    hashParams.set('lesson', 'custom');
+                    hashParams.set('custom_lessons', customLessons.join(','));
+                } else if (selectedLesson !== '全部' && selectedLesson !== 'user_input') {
+                    hashParams.set('lesson', selectedLesson);
                 }
                 
-                const textToCopy = url.toString();
-
-                // 使用傳統的 execCommand 方式，因為它在 iframe 中的兼容性較好
-                const textArea = document.createElement("textarea");
-                textArea.value = textToCopy;
-                
-                // 隱藏 textarea
-                textArea.style.position = "fixed";
-                textArea.style.left = "-9999px";
-                textArea.style.top = "0";
-                
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                
-                try {
-                    const successful = document.execCommand('copy');
-                    if (successful) {
-                         alert('連結已複製！傳送給學生即可練習此課程。\n\n' + textToCopy);
-                    } else {
-                        throw new Error('Copy failed');
-                    }
-                } catch (err) {
-                    console.error('Fallback copy failed', err);
-                    prompt("請手動複製連結：", textToCopy);
-                } finally {
-                    document.body.removeChild(textArea);
+                const hashStr = hashParams.toString();
+                if (hashStr) {
+                    url.hash = hashStr;
                 }
+                
+                setShareUrl(url.toString());
+                setIsShareModalOpen(true);
             };
-
-            useEffect(() => {
-                // 檢查網址參數
-                const params = new URLSearchParams(window.location.search);
-                const lessonParam = params.get('lesson');
-                
-                if (lessonParam && uniqueLessons.includes(lessonParam)) {
-                    setSelectedLesson(lessonParam);
-                    initSession(lessonParam);
-                } else {
-                    // We don't initSession here yet if no name, waiting for name entry
-                }
-            }, []); // Empty dependency array ensures this runs once on mount
 
             if (!playerName) {
                 return <NameEntryScreen onStart={(name) => {
                     setPlayerName(name);
-                    // Start session after name is entered
-                    const params = new URLSearchParams(window.location.search);
-                    const lessonParam = params.get('lesson');
-                    if (lessonParam && uniqueLessons.includes(lessonParam)) {
-                         initSession(lessonParam);
-                    } else {
-                         initSession('全部');
-                    }
+                    // 已在元件層級的 useState 將 URL 參數處理好，這裡直接觸發 initSession 即可完美還原
+                    initSession();
                 }} />;
             }
 
@@ -1216,6 +1301,12 @@
                             if (selectedLesson === 'user_input') setSelectedLesson('全部');
                         }}
                         onConfirm={handleUserSentencesConfirm}
+                    />
+
+                    <ShareModal 
+                        isOpen={isShareModalOpen}
+                        onClose={() => setIsShareModalOpen(false)}
+                        shareUrl={shareUrl}
                     />
 
                     <div className="flex flex-col w-full h-full max-w-6xl max-h-full bg-white rounded-xl sm:rounded-3xl shadow-2xl border-4 border-yellow-200 overflow-hidden">
@@ -1343,7 +1434,9 @@
                             </>
                         )}
                     </div>
-                    <div className="shrink-0 mt-2 text-gray-400 text-xs text-center"><div>學華語向前走第二冊</div><div className="mt-1 font-medium text-gray-300">Design by Sophia Wong</div></div>
+                    <div className="shrink-0 mt-3 text-gray-400 text-xs text-center font-medium">
+                        Powered by Gemini | Sophia老師的AI練習本
+                    </div>
                 </div>
             );
         };
